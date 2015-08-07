@@ -7,3 +7,5 @@ gcc epoll-example-server.c -o server
 ### run
 ./server 8889
 ./test.sh
+
+>blog.csdn.net/huntinux/article/details/46964995
