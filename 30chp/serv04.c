@@ -1,11 +1,11 @@
 /*
  *
  *
- * 并发服务器，预先创建进程 , accept不上锁
- * 会发生"惊群"现象,即: 所有预先创建好的子进程都会阻塞在accept上,
- * 而当有一个新连接到来时,所有等待的子进程都会被唤醒,但是只有一个能够accept成功,
- * 其他仍然会继续等待.
+ * 并发服务器，预先创建进程 , accept 线程上锁保护 
+ * 文件上锁涉及到文件系统,因此速度要慢一些
+ * 上锁的目的是:在某一时刻,仅仅让一个子进程阻塞在accept上.
  *
+ * $ gcc serv04.c -o serv04 -lpthread
  */
 
 #include <stdio.h>
@@ -21,10 +21,48 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <fcntl.h>
 
 #define LISTENQ 10
 #define MAXLINE 1024
 #define	MAXN	16384		/* max # bytes client can request */
+
+#include	<sys/mman.h>
+
+static pthread_mutex_t	*mptr;	/* actual mutex will be in shared memory */
+
+void
+my_lock_init(char *pathname)
+{
+	int		fd;
+	pthread_mutexattr_t	mattr;
+
+	fd = open("/dev/zero", O_RDWR, 0);
+
+
+	mptr = mmap(0, sizeof(pthread_mutex_t), PROT_READ | PROT_WRITE,
+				MAP_SHARED, fd, 0);
+	close(fd);
+
+	// 这里必须指出,这个互斥锁是位于共享内存区的互斥锁,将用于不同进程之间上锁
+	pthread_mutexattr_init(&mattr);
+	pthread_mutexattr_setpshared(&mattr, PTHREAD_PROCESS_SHARED);
+	pthread_mutex_init(mptr, &mattr);
+}
+/* end my_lock_init */
+
+/* include my_lock_wait */
+void
+my_lock_wait()
+{
+	pthread_mutex_lock(mptr);
+}
+
+void
+my_lock_release()
+{
+	pthread_mutex_unlock(mptr);
+}
 
 typedef void (Sigfunc)(int);
 Sigfunc*  signal(int signo, Sigfunc *func)
@@ -48,7 +86,6 @@ Sigfunc*  signal(int signo, Sigfunc *func)
 	return(oact.sa_handler);
 }
 
-
 pid_t child_make(int i, int listenfd, int addrlen)
 {
 	pid_t	pid;
@@ -59,9 +96,7 @@ pid_t child_make(int i, int listenfd, int addrlen)
 
 	child_main(i, listenfd, addrlen);	/* never returns */
 }
-/* end child_make */
 
-/* include child_main */
 void child_main(int i, int listenfd, int addrlen)
 {
 	int				connfd;
@@ -74,11 +109,14 @@ void child_main(int i, int listenfd, int addrlen)
 	printf("child %ld starting\n", (long) getpid());
 	for ( ; ; ) {
 		clilen = addrlen;
+		my_lock_wait();
 		connfd = accept(listenfd, cliaddr, &clilen);
+		my_lock_release();
 
 		web_child(connfd);		/* process the request */
 		close(connfd);
 	}
+
 }
 
 void pr_cpu_time(void)
@@ -201,7 +239,8 @@ int tcp_listen(const char *host, const char *serv, socklen_t *addrlenp)
 static int		nchildren;
 static pid_t	*pids;
 
-int main(int argc, char **argv)
+int
+main(int argc, char **argv)
 {
 	int			listenfd, i;
 	socklen_t	addrlen;
@@ -213,12 +252,13 @@ int main(int argc, char **argv)
 	else if (argc == 4)
 		listenfd = tcp_listen(argv[1], argv[2], &addrlen);
 	else {
-		fprintf(stderr, "usage: serv02 [ <host> ] <port#> <#children>");
+		fprintf(stderr, "usage: serv03 [ <host> ] <port#> <#children>");
 		exit(1);
 	}
 	nchildren = atoi(argv[argc-1]);
 	pids = calloc(nchildren, sizeof(pid_t));
 
+	my_lock_init("/tmp/lock.XXXXXX"); /* one lock file for all children */
 	for (i = 0; i < nchildren; i++)
 		pids[i] = child_make(i, listenfd, addrlen);	/* parent returns */
 
@@ -227,16 +267,14 @@ int main(int argc, char **argv)
 	for ( ; ; )
 		pause();	/* everything done by children */
 }
-/* end serv02 */
 
-/* include sigint */
 void
 sig_int(int signo)
 {
 	int		i;
 	void	pr_cpu_time(void);
 
-		/* 4terminate all children */
+		/* terminate all children */
 	for (i = 0; i < nchildren; i++)
 		kill(pids[i], SIGTERM);
 	while (wait(NULL) > 0)		/* wait for all children */
@@ -249,4 +287,3 @@ sig_int(int signo)
 	pr_cpu_time();
 	exit(0);
 }
-/* end sigint */

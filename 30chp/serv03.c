@@ -1,10 +1,8 @@
 /*
  *
  *
- * 并发服务器，预先创建进程 , accept不上锁
- * 会发生"惊群"现象,即: 所有预先创建好的子进程都会阻塞在accept上,
- * 而当有一个新连接到来时,所有等待的子进程都会被唤醒,但是只有一个能够accept成功,
- * 其他仍然会继续等待.
+ * 并发服务器，预先创建进程 , accept 文件上锁 fcntl
+ * 上锁的目的是:在某一时刻,仅仅让一个子进程阻塞在accept上.
  *
  */
 
@@ -21,6 +19,7 @@
 #include <unistd.h>
 #include <signal.h>
 #include <sys/resource.h>
+#include <fcntl.h>
 
 #define LISTENQ 10
 #define MAXLINE 1024
@@ -48,7 +47,6 @@ Sigfunc*  signal(int signo, Sigfunc *func)
 	return(oact.sa_handler);
 }
 
-
 pid_t child_make(int i, int listenfd, int addrlen)
 {
 	pid_t	pid;
@@ -59,9 +57,7 @@ pid_t child_make(int i, int listenfd, int addrlen)
 
 	child_main(i, listenfd, addrlen);	/* never returns */
 }
-/* end child_make */
 
-/* include child_main */
 void child_main(int i, int listenfd, int addrlen)
 {
 	int				connfd;
@@ -74,11 +70,14 @@ void child_main(int i, int listenfd, int addrlen)
 	printf("child %ld starting\n", (long) getpid());
 	for ( ; ; ) {
 		clilen = addrlen;
+		my_lock_wait();
 		connfd = accept(listenfd, cliaddr, &clilen);
+		my_lock_release();
 
 		web_child(connfd);		/* process the request */
 		close(connfd);
 	}
+
 }
 
 void pr_cpu_time(void)
@@ -200,8 +199,58 @@ int tcp_listen(const char *host, const char *serv, socklen_t *addrlenp)
 
 static int		nchildren;
 static pid_t	*pids;
+static struct flock	lock_it, unlock_it;
+static int			lock_fd = -1;
 
-int main(int argc, char **argv)
+/* fcntl() will fail if my_lock_init() not called */
+void my_lock_init(char *pathname)
+{
+    char	lock_file[1024];
+
+		/* 4must copy caller's string, in case it's a constant */
+    strncpy(lock_file, pathname, sizeof(lock_file));
+    lock_fd = mkstemp(lock_file);
+
+    unlink(lock_file);			/* but lock_fd remains open */
+
+	lock_it.l_type = F_WRLCK;
+	lock_it.l_whence = SEEK_SET;
+	lock_it.l_start = 0;
+	lock_it.l_len = 0;
+
+	unlock_it.l_type = F_UNLCK;
+	unlock_it.l_whence = SEEK_SET;
+	unlock_it.l_start = 0;
+	unlock_it.l_len = 0;
+}
+/* end my_lock_init */
+
+/* include my_lock_wait */
+void my_lock_wait()
+{
+    int		rc;
+    
+    while ( (rc = fcntl(lock_fd, F_SETLKW, &lock_it)) < 0) {
+		if (errno == EINTR)
+			continue;
+    	else {
+			fprintf(stderr, "fcntl error for my_lock_wait");
+			exit(1);
+		}
+	}
+}
+
+void my_lock_release()
+{
+    if (fcntl(lock_fd, F_SETLKW, &unlock_it) < 0) {
+		fprintf(stderr,"fcntl error for my_lock_release");
+		exit(1);
+	}
+
+}
+
+int
+main(int argc, char **argv)
 {
 	int			listenfd, i;
 	socklen_t	addrlen;
@@ -213,12 +262,13 @@ int main(int argc, char **argv)
 	else if (argc == 4)
 		listenfd = tcp_listen(argv[1], argv[2], &addrlen);
 	else {
-		fprintf(stderr, "usage: serv02 [ <host> ] <port#> <#children>");
+		fprintf(stderr, "usage: serv03 [ <host> ] <port#> <#children>");
 		exit(1);
 	}
 	nchildren = atoi(argv[argc-1]);
 	pids = calloc(nchildren, sizeof(pid_t));
 
+	my_lock_init("/tmp/lock.XXXXXX"); /* one lock file for all children */
 	for (i = 0; i < nchildren; i++)
 		pids[i] = child_make(i, listenfd, addrlen);	/* parent returns */
 
@@ -227,16 +277,14 @@ int main(int argc, char **argv)
 	for ( ; ; )
 		pause();	/* everything done by children */
 }
-/* end serv02 */
 
-/* include sigint */
 void
 sig_int(int signo)
 {
 	int		i;
 	void	pr_cpu_time(void);
 
-		/* 4terminate all children */
+		/* terminate all children */
 	for (i = 0; i < nchildren; i++)
 		kill(pids[i], SIGTERM);
 	while (wait(NULL) > 0)		/* wait for all children */
@@ -249,4 +297,3 @@ sig_int(int signo)
 	pr_cpu_time();
 	exit(0);
 }
-/* end sigint */
