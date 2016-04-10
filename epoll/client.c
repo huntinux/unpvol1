@@ -48,9 +48,8 @@ int main(int argc, char ** argv)
     }
 
 	// 与服务器进行通信
-	snprintf(recvline, MAXLINE, "Hello, I am client with pid: %d\n \
-								My message is:\n%s\n", getpid(), argv[3]);
-	n = write(sockfd, recvline, strlen(recvline));
+	snprintf(recvline, MAXLINE, "Hello, I am client with pid: %d.My message is:%s", getpid(), argv[3]);
+	n = write(sockfd, recvline, strlen(recvline) + 1);
 	/*
     while( (n = read(sockfd, recvline, MAXLINE)) > 0) {
 		cnt++;
