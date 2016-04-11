@@ -22,7 +22,8 @@
 #include <poll.h>
 
 #define BUFFER_SIZE 1024 
-#define FD_LIMIT    65535 /* max number file descriptor */
+#define FD_LIMIT    65535  /* max number file descriptor */
+#define MAX_CLIENT_NUM 128 /* max client number, must less than FD_LIMIT - 1 - 3 */
 
 struct client_info
 {
@@ -97,9 +98,9 @@ static int create_and_bind (char *port)
 
 int main(int argc, char *argv[])
 {
-    if(argc != 3)
+    if(argc != 2)
     {
-        printf("Usage: %s [port] [max_client_num]\n", basename(argv[0]));
+        printf("Usage: %s [port]\n", basename(argv[0]));
         return -1;
     }
 
@@ -121,7 +122,7 @@ int main(int argc, char *argv[])
 
     /* prepare client connection socket descriptors,
        plus one for listen socket descriptor */
-    int max_client_num = atoi(argv[2]);
+    int max_client_num = MAX_CLIENT_NUM;
     if(max_client_num > FD_LIMIT - 1 - 3) /* one for listen socket fd, three for stdin stdout stderr */
     {
         fprintf(stderr, "max_client_num should not larger than %d.\n", FD_LIMIT - 1 - 3);
@@ -135,7 +136,7 @@ int main(int argc, char *argv[])
         return -4;
     }
     pfd[0].fd = listenfd;
-    pfd[0].events = POLLIN | POLLERR;
+    pfd[0].events = POLLIN;
 
     while(1)
     {
@@ -165,7 +166,7 @@ int main(int argc, char *argv[])
                 clients[connfd].address = client_address;
                 current_client_num++;
                 pfd[current_client_num].fd = connfd;
-                pfd[current_client_num].events = POLLIN | POLLRDHUP | POLLERR;
+                pfd[current_client_num].events = POLLIN | POLLRDHUP ;
                 pfd[current_client_num].revents = 0;
                 printf_address((struct sockaddr *)&client_address, client_addrlength, "Accept: ");
             }
@@ -199,7 +200,7 @@ int main(int argc, char *argv[])
             else if( pfd[i].revents & POLLIN )
             {
                 int connfd = pfd[i].fd;
-                memset(clients[connfd].rb, '\0', BUFFER_SIZE);
+                //memset(clients[connfd].rb, '\0', BUFFER_SIZE);
                 int ret = recv(connfd, clients[connfd].rb, BUFFER_SIZE-1, 0 );
                 printf( "get %d bytes of client data %s from %d\n", ret, clients[connfd].rb, connfd );
                 if( ret < 0 )
@@ -220,6 +221,7 @@ int main(int argc, char *argv[])
                 else
                 {
                     /* prepare send message to other clients */
+					clients[connfd].rb[ret] = '\0';
                     for( int j = 1; j <= current_client_num; ++j )
                     {
                         if( pfd[j].fd == connfd )
@@ -227,7 +229,7 @@ int main(int argc, char *argv[])
                             continue;
                         }
                         
-                        pfd[j].events |= ~POLLIN;
+                        pfd[j].events &= ~POLLIN;
                         pfd[j].events |= POLLOUT;
                         clients[pfd[j].fd].wb= clients[connfd].rb;
                     }
@@ -241,8 +243,9 @@ int main(int argc, char *argv[])
                     continue;
                 }
                 int ret = send( connfd, clients[connfd].wb, strlen( clients[connfd].wb), 0 );
+				//printf("send %d bytes data to %d\n", ret, connfd);
                 clients[connfd].wb = NULL;
-                pfd[i].events |= ~POLLOUT;
+                pfd[i].events &= ~POLLOUT;
                 pfd[i].events |= POLLIN;
             }
         }

@@ -1,3 +1,4 @@
+#if 0
 /**
  * Group Chat Client 
  * Use 'poll'
@@ -68,7 +69,6 @@ static int create_and_connect(const char *ip, const char *port)
     return connfd;
 }
 
-#if 0
 int main(int argc, char *argv[])
 {
     if(argc != 3)

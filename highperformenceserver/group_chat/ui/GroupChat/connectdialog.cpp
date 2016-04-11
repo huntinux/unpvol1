@@ -22,17 +22,20 @@
 
 ConnectDialog::ConnectDialog(QWidget *parent) :
         QDialog(parent),
-        ui(new Ui::ConnectDialog)
+        ui(new Ui::ConnectDialog),
+        m_connfd(-1)
 {
     ui->setupUi(this);
     ui->serverIpLineEdit->setText("127.0.0.1");
     ui->serverPortLineEdit->setText("9090");
+    setWindowTitle(tr("Connect to Chat Server"));
 }
 
 ConnectDialog::~ConnectDialog()
 {
     delete ui;
 }
+
 static int create_and_connect(const char *ip, const char *port)
 {
     struct addrinfo hints;
@@ -80,9 +83,8 @@ static int create_and_connect(const char *ip, const char *port)
 
 bool ConnectDialog::ConnectToServer(const char *ip, const char *port)
 {
-    return (m_connfd = create_and_connect(ip, port) > 0);
+    return (m_connfd = create_and_connect(ip, port)) > 0;
 }
-
 
 void ConnectDialog::on_connectBtn_clicked()
 {

@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>592</width>
-    <height>510</height>
+    <width>523</width>
+    <height>437</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -16,29 +16,19 @@
   <widget class="QTextEdit" name="historyTextEdit">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>10</y>
-     <width>571</width>
-     <height>351</height>
+     <x>9</x>
+     <y>9</y>
+     <width>501</width>
+     <height>301</height>
     </rect>
    </property>
   </widget>
-  <widget class="QTextEdit" name="sendTextEdit">
+  <widget class="QWidget" name="layoutWidget">
    <property name="geometry">
     <rect>
-     <x>10</x>
-     <y>370</y>
-     <width>571</width>
-     <height>91</height>
-    </rect>
-   </property>
-  </widget>
-  <widget class="QWidget" name="">
-   <property name="geometry">
-    <rect>
-     <x>20</x>
-     <y>471</y>
-     <width>551</width>
+     <x>9</x>
+     <y>393</y>
+     <width>501</width>
      <height>33</height>
     </rect>
    </property>
@@ -65,10 +55,19 @@
     </item>
    </layout>
   </widget>
+  <widget class="QTextEdit" name="sendTextEdit">
+   <property name="geometry">
+    <rect>
+     <x>9</x>
+     <y>326</y>
+     <width>501</width>
+     <height>61</height>
+    </rect>
+   </property>
+  </widget>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <tabstops>
-  <tabstop>sendTextEdit</tabstop>
   <tabstop>sendBtn</tabstop>
   <tabstop>historyTextEdit</tabstop>
  </tabstops>

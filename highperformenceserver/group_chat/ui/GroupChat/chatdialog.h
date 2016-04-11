@@ -30,8 +30,8 @@ private:
     int m_connfd;
     char sendbuff[BUFFER_SIZE];
     char recvbuff[BUFFER_SIZE];
-    size_t recvpos = 0;
-    size_t sendpos = 0;
+    size_t recvpos;
+    size_t sendpos;
     CThread *poll_thread;
 };
 

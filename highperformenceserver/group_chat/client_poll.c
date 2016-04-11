@@ -85,8 +85,10 @@ int main(int argc, char *argv[])
     struct pollfd pfd[2];
     pfd[0].fd = STDIN_FILENO;
     pfd[0].events = POLLIN;
+	pfd[0].revents = 0;
     pfd[1].fd = connfd;
     pfd[1].events = POLLIN | POLLRDHUP | POLLERR;
+	pfd[1].revents = 0;
     
     char sendbuff[BUFFER_SIZE];
     char recvbuff[BUFFER_SIZE];
@@ -140,7 +142,7 @@ int main(int argc, char *argv[])
                     printf( "code should not come to here\n" );
                 }
                 recvpos = ret;
-                fprintf(stdout, "%s", recvbuff);
+				write(STDOUT_FILENO, recvbuff, recvpos);
             }
             else if(pfd[i].revents & POLLOUT)
             {
